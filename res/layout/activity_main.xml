@@ -29,7 +29,7 @@
 		        android:layout_height="wrap_content"
 		        android:layout_alignParentBottom="true"
 		        android:layout_centerHorizontal="true"
-		        android:text="Orientation"
+		        android:text="Absolute-N"
 		        android:textAppearance="?android:attr/textAppearanceLarge" />
 		    
         </RelativeLayout>
@@ -49,8 +49,9 @@
 		        android:layout_height="wrap_content"
 		        android:layout_alignParentBottom="true"
 		        android:layout_centerHorizontal="true"
-		        android:text="Magnetic Field"
-		        android:textAppearance="?android:attr/textAppearanceMedium" />
+		        android:text="Magnetic"
+		        android:textAppearance="?android:attr/textAppearanceMedium"
+		        android:textSize="@dimen/activity_horizontal_margin" />
 		    
         </RelativeLayout>
 
@@ -76,7 +77,7 @@
 		        android:layout_height="wrap_content"
 		        android:layout_alignParentBottom="true"
 		        android:layout_centerHorizontal="true"
-		        android:text="R-Orientation"
+		        android:text="Orientation"
 		        android:textAppearance="?android:attr/textAppearanceLarge" />
 		    
         </RelativeLayout>
@@ -96,7 +97,7 @@
 		        android:layout_height="wrap_content"
 		        android:layout_alignParentBottom="true"
 		        android:layout_centerHorizontal="true"
-		        android:text="R-Magnetic Field"
+		        android:text="XXX"
 		        android:textAppearance="?android:attr/textAppearanceMedium" />
 		    
         </RelativeLayout>

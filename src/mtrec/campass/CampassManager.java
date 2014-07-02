@@ -16,21 +16,26 @@ public class CampassManager {
 	private boolean mDirectionStarted;
 	private float mReferenceDegree, mDegree, mDiff;
 	private int mSampleSize;
+	private SensorEventListener mListener, mListener2;
 	private HandlerThread mCalculationHandlerThread;
 	private Handler mCalculationHandler;
 	private List<CampassListener> mCampassListeners = new ArrayList<CampassListener>();
 	private List<SensorEventListener> mSensorEventListeners = new ArrayList<SensorEventListener>();
 	
 	public CampassManager(SensorManager sensorManager) {
+		
 		mSensorManager = sensorManager;
 		initValues();
+		
 		mCalculationHandlerThread = new HandlerThread("Campass Calculation Thread");
 		mCalculationHandlerThread.start();
 		mCalculationHandler = new Handler(mCalculationHandlerThread.getLooper());
-		mSensorManager.registerListener(new SensorEventListener() {
+		
+		mListener = new SensorEventListener() {
 			{
 				mSensorEventListeners.add(this);
 			}
+			
 			@Override
 			public void onSensorChanged(SensorEvent event) {
 				double radian = Math.atan2(event.values[0], event.values[1]);
@@ -46,12 +51,15 @@ public class CampassManager {
 			@Override
 			public void onAccuracyChanged(Sensor sensor, int accuracy) {
 			}
-		}, sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD), SensorManager.SENSOR_DELAY_NORMAL);
-		mSensorManager.registerListener(new SensorEventListener() {
+			
+		};
+		
+		mListener2 = new SensorEventListener() {
 			{
 				mSensorEventListeners.add(this);
 			}
 			private long startTime = 0;
+			
 			@Override
 			public void onSensorChanged(SensorEvent event) {
 				long currentTime = System.currentTimeMillis();
@@ -69,8 +77,24 @@ public class CampassManager {
 			
 			@Override
 			public void onAccuracyChanged(Sensor sensor, int accuracy) {
+				// TODO Auto-generated method stub
+				
 			}
-		}, sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), SensorManager.SENSOR_DELAY_NORMAL);
+		};
+		
+		
+		
+	}
+	
+	public void registerCampassListener() {
+		mSensorManager.registerListener(mListener, mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD), SensorManager.SENSOR_DELAY_GAME);
+		mSensorManager.registerListener(mListener2, mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), SensorManager.SENSOR_DELAY_GAME);
+	}
+	
+	public void unregisterCampassListener() {
+		for (SensorEventListener sensorEventListener : mSensorEventListeners) {
+			mSensorManager.unregisterListener(sensorEventListener);
+		}
 	}
 	
 	public void addCampassListener(CampassListener campassListener) {
@@ -79,6 +103,7 @@ public class CampassManager {
 	
 	@Override
 	protected void finalize() throws Throwable {
+		
 		mCalculationHandlerThread.interrupt();
 		for (SensorEventListener sensorEventListener : mSensorEventListeners) {
 			mSensorManager.unregisterListener(sensorEventListener);
@@ -87,7 +112,9 @@ public class CampassManager {
 	}
 	
 	private synchronized void changeInMagneticField(float degree, boolean isReal) {
-		if (isReal) {
+		
+		if (isReal) 
+		{
 			mDegree = degree;
 			if (!mDirectionStarted) {
 				mReferenceDegree = degree;
@@ -99,7 +126,9 @@ public class CampassManager {
 				while (diff < 180) diff += 360;
 				mDiff = (mDiff * mSampleSize + diff) / ++mSampleSize;
 			}
-		} else {
+		} 
+		else 
+		{
 			if (mDirectionStarted) {
 				mReferenceDegree += degree;
 				float diff = mDegree - mReferenceDegree;
