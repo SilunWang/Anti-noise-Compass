@@ -1,5 +1,6 @@
 package mtrec.campass;
 
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,6 +10,7 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.widget.TextView;
 
 public class CampassManager {
 	
@@ -16,6 +18,7 @@ public class CampassManager {
 	private boolean mDirectionStarted;
 	private float mReferenceDegree, mDegree, mDiff;
 	private int mSampleSize;
+	
 	private SensorEventListener mListener, mListener2;
 	private HandlerThread mCalculationHandlerThread;
 	private Handler mCalculationHandler;
@@ -38,18 +41,25 @@ public class CampassManager {
 			
 			@Override
 			public void onSensorChanged(SensorEvent event) {
+				
 				double radian = Math.atan2(event.values[0], event.values[1]);
 				final float degree = (float) (radian * 180 / Math.PI);
+				DecimalFormat fnum = new  DecimalFormat("###.#");
+	            String str = fnum.format(-degree);
+				//magText.setText(str);
 				mCalculationHandler.post(new Runnable() {
 					@Override
 					public void run() {
 						changeInMagneticField(degree, true);
+						
 					}
 				});
+	            
 			}
 			
 			@Override
 			public void onAccuracyChanged(Sensor sensor, int accuracy) {
+				
 			}
 			
 		};
@@ -65,6 +75,7 @@ public class CampassManager {
 				long currentTime = System.currentTimeMillis();
 				if (startTime > 0) {
 					final float degree = (float) (event.values[2] * (currentTime - startTime) / 1000 * 180 / Math.PI);
+					
 					mCalculationHandler.post(new Runnable() {
 						@Override
 						public void run() {
@@ -82,9 +93,8 @@ public class CampassManager {
 			}
 		};
 		
-		
-		
 	}
+	
 	
 	public void registerCampassListener() {
 		mSensorManager.registerListener(mListener, mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD), SensorManager.SENSOR_DELAY_GAME);
@@ -111,7 +121,7 @@ public class CampassManager {
 		super.finalize();
 	}
 	
-	private synchronized void changeInMagneticField(float degree, boolean isReal) {
+	private synchronized float changeInMagneticField(float degree, boolean isReal) {
 		
 		if (isReal) 
 		{
@@ -140,6 +150,7 @@ public class CampassManager {
 		for (CampassListener campassListener : mCampassListeners) {
 			campassListener.onDirectionChanged(mReferenceDegree + mDiff);
 		}
+		return mReferenceDegree + mDiff;
 	}
 	
 	private void initValues() {
