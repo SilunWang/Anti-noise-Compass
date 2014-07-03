@@ -15,26 +15,39 @@ import android.widget.TextView;
 public class CampassManager {
 	
 	private final SensorManager mSensorManager;
-	private boolean mDirectionStarted;
-	private float mReferenceDegree, mDegree, mDiff;
-	private int mSampleSize;
+	private SensorEventListener magnetListener, gyroscopeListener;
 	
-	private SensorEventListener mListener, mListener2;
+	//if started
+	private boolean mDirectionStarted;
+	//
+	public float mReferenceDegree;
+	//magnet degree
+	public float magDegree;
+	public float mDiff;
+	private int mSampleSize;
+
 	private HandlerThread mCalculationHandlerThread;
 	private Handler mCalculationHandler;
 	private List<CampassListener> mCampassListeners = new ArrayList<CampassListener>();
 	private List<SensorEventListener> mSensorEventListeners = new ArrayList<SensorEventListener>();
+	
+	//x, y, z degrees
+	public float orientDegree = 0;
+	public float tiltDegree = 0;
+	public float rotateDegree = 0;
 	
 	public CampassManager(SensorManager sensorManager) {
 		
 		mSensorManager = sensorManager;
 		initValues();
 		
+		//Handler Thread
 		mCalculationHandlerThread = new HandlerThread("Campass Calculation Thread");
 		mCalculationHandlerThread.start();
 		mCalculationHandler = new Handler(mCalculationHandlerThread.getLooper());
 		
-		mListener = new SensorEventListener() {
+		//magnetic field
+		magnetListener = new SensorEventListener() {
 			{
 				mSensorEventListeners.add(this);
 			}
@@ -42,16 +55,13 @@ public class CampassManager {
 			@Override
 			public void onSensorChanged(SensorEvent event) {
 				
-				double radian = Math.atan2(event.values[0], event.values[1]);
-				final float degree = (float) (radian * 180 / Math.PI);
-				DecimalFormat fnum = new  DecimalFormat("###.#");
-	            String str = fnum.format(-degree);
-				//magText.setText(str);
+				float radian = (float) Math.atan2(event.values[0], event.values[1]);
+				final float degree = (float) Math.toDegrees(radian);
+				
 				mCalculationHandler.post(new Runnable() {
 					@Override
 					public void run() {
-						changeInMagneticField(degree, true);
-						
+						calibrateMagnetDegree(degree, true);
 					}
 				});
 	            
@@ -64,7 +74,8 @@ public class CampassManager {
 			
 		};
 		
-		mListener2 = new SensorEventListener() {
+		//gyroscope change
+		gyroscopeListener = new SensorEventListener() {
 			{
 				mSensorEventListeners.add(this);
 			}
@@ -72,14 +83,23 @@ public class CampassManager {
 			
 			@Override
 			public void onSensorChanged(SensorEvent event) {
+				
 				long currentTime = System.currentTimeMillis();
-				if (startTime > 0) {
-					final float degree = (float) (event.values[2] * (currentTime - startTime) / 1000 * 180 / Math.PI);
+				
+				if (startTime > 0)
+				{
+					// z-axis rotation
+					final float degree = (float) Math.toDegrees(event.values[2] * (currentTime - startTime) / 1000);
+					
+					if(tiltDegree > 60 || tiltDegree < -60)
+						resetNorth();
+					if(rotateDegree > 60 || rotateDegree < -60)
+						resetNorth();
 					
 					mCalculationHandler.post(new Runnable() {
 						@Override
 						public void run() {
-							changeInMagneticField(degree, false);
+							calibrateMagnetDegree(degree, false);
 						}
 					});
 				}
@@ -95,12 +115,21 @@ public class CampassManager {
 		
 	}
 	
-	
-	public void registerCampassListener() {
-		mSensorManager.registerListener(mListener, mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD), SensorManager.SENSOR_DELAY_GAME);
-		mSensorManager.registerListener(mListener2, mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), SensorManager.SENSOR_DELAY_GAME);
+	//reset when extreme rotation
+	public void resetNorth() {
+		mDiff = 0;
+		mSampleSize = 0;
+		mReferenceDegree = magDegree;
+		mDirectionStarted = false;
 	}
 	
+	//register all
+	public void registerCampassListener() {
+		mSensorManager.registerListener(magnetListener, mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD), SensorManager.SENSOR_DELAY_GAME);
+		mSensorManager.registerListener(gyroscopeListener, mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE), SensorManager.SENSOR_DELAY_GAME);
+	}
+	
+	//unregister all
 	public void unregisterCampassListener() {
 		for (SensorEventListener sensorEventListener : mSensorEventListeners) {
 			mSensorManager.unregisterListener(sensorEventListener);
@@ -121,41 +150,60 @@ public class CampassManager {
 		super.finalize();
 	}
 	
-	private synchronized float changeInMagneticField(float degree, boolean isReal) {
+	//core algorithm: calibrate north direction
+	private synchronized float calibrateMagnetDegree(float degree, boolean isReal) {
 		
-		if (isReal) 
+		if (isReal)	//magnetic input
 		{
-			mDegree = degree;
-			if (!mDirectionStarted) {
+			magDegree = degree;
+			if (!mDirectionStarted)
+			{
+				//initial state
 				mReferenceDegree = degree;
 				mDiff = mSampleSize = 0;
 				mDirectionStarted = true;
-			} else {
-				float diff = mDegree - mReferenceDegree;
-				while (diff > 180) diff -= 360;
-				while (diff < 180) diff += 360;
+			} 
+			else 
+			{
+				float diff = magDegree - mReferenceDegree;
+				normalize(diff);
+				//take average
 				mDiff = (mDiff * mSampleSize + diff) / ++mSampleSize;
+				normalize(mDiff);
 			}
 		} 
-		else 
+		else //gyroscope input
 		{
-			if (mDirectionStarted) {
+			if (mDirectionStarted) 
+			{
 				mReferenceDegree += degree;
-				float diff = mDegree - mReferenceDegree;
-				while (diff > 180) diff -= 360;
-				while (diff < 180) diff += 360;
+				float diff = magDegree - mReferenceDegree;
+				normalize(diff);
+				//take average
 				mDiff = (mDiff * mSampleSize + diff) / ++mSampleSize;
+				normalize(mDiff);
 			}
 		}
+		
 		for (CampassListener campassListener : mCampassListeners) {
 			campassListener.onDirectionChanged(mReferenceDegree + mDiff);
 		}
+		
 		return mReferenceDegree + mDiff;
 	}
 	
+	public float normalize(float degree) {
+		while (degree > 180)
+			degree -= 360;
+		while (degree < -180)
+			degree += 360;
+		return degree;
+	}
+	
+	//init degrees
 	private void initValues() {
 		mDirectionStarted = false;
-		mReferenceDegree = mDegree = mDiff = mSampleSize = 0;
+		mReferenceDegree = magDegree = mDiff = mSampleSize = 0;
 	}
 
 }

@@ -33,14 +33,7 @@ public class MainActivity extends Activity {
     
 	private CampassView absoluteCampassView;
 	
-	private TextView magText;
-	
-	private float orientationReferenceDegree, orientationDegree, orientationDiff;
-	private int orientationSampleSize = -1;
-	private boolean gravityFilled = false, magneticFilled = false;
-	private final Matrix3f gravityVector = new Matrix3f(), magneticFieldReferenceVector = new Matrix3f(), magneticFieldVector = new Matrix3f();
-	private float magneticFieldReferenceDegree, magneticFieldDegree, magneticFieldDiffInDegree;
-	private int magneticFieldSampleSize = -1;
+	private TextView magText, mReferenceText, mDiffText;
 	private Handler calculationHandler;
 	private double magneticTense = 0;
 	
@@ -49,24 +42,27 @@ public class MainActivity extends Activity {
 	private float[] values = new float[3];
 	private float[] Rmatrix = new float[9];
 	
+	public float orientDegree = 0;
+	public float tiltDegree = 0;
+	public float rotateDegree = 0;
+	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
 		mContext = getApplicationContext();
-		
 		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-		
+		//Handler Thread
 		HandlerThread handlerThread = new HandlerThread("Calculation Thread");
 		handlerThread.start();
 		calculationHandler = new Handler(handlerThread.getLooper());
-		
-		absoluteCampassView = (CampassView) findViewById(R.id.orientation);
-		//oriText = (TextView) findViewById(R.id.oriDegree);
-		//absoText = (TextView) findViewById(R.id.absoDegree);
-		//magText = (TextView) findViewById(R.id.magDegree);
+		//imageView
+		absoluteCampassView = (CampassView) findViewById(R.id.absoluteNorth);
+
 		magText = (TextView) findViewById(R.id.magnitude);
+		mReferenceText = (TextView) findViewById(R.id.mReference);
+		mDiffText = (TextView) findViewById(R.id.mDiff);
 		
 		sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
 		accSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
@@ -93,27 +89,45 @@ public class MainActivity extends Activity {
 			
 			@Override
 			public void onSensorChanged(SensorEvent event) {
+				
 				// TODO Auto-generated method stub
-				if(event.sensor.getType()==Sensor.TYPE_ACCELEROMETER){    
-	                accelerometerValues=event.values;
-	            }    
-	            if(event.sensor.getType()==Sensor.TYPE_MAGNETIC_FIELD){    
-	                magneticFieldValues=event.values;
-	                magneticTense = Math.sqrt(magneticFieldValues[0]*magneticFieldValues[0] + magneticFieldValues[1]*magneticFieldValues[1] + magneticFieldValues[2]*magneticFieldValues[2]);
+				// accelerometer
+				if(event.sensor.getType() == Sensor.TYPE_ACCELEROMETER)
+				{
+	                accelerometerValues = event.values;
+	            }
+				// magnetic change
+	            if(event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD)
+	            {
+	                magneticFieldValues = event.values;
+	                //calculate tensity
+	                magneticTense = Math.sqrt(
+	                		magneticFieldValues[0]*magneticFieldValues[0] 
+	                		+ magneticFieldValues[1]*magneticFieldValues[1] 
+	                				+ magneticFieldValues[2]*magneticFieldValues[2]);
+	                //format change
 	                DecimalFormat fnum = new  DecimalFormat("#########.#");
 		            String str = fnum.format(magneticTense);
-					magText.setText(str);
+					magText.setText("Magnet Tensity: " + str);
 	            }
+	            
 	            //调用getRotaionMatrix获得变换矩阵R[]
 	            SensorManager.getRotationMatrix(Rmatrix, null, accelerometerValues, magneticFieldValues);    
 	            SensorManager.getOrientation(Rmatrix, values);
 	            
 	            //得到的values值为弧度
 	            //转换为角度
-	            values[0] = (float)Math.toDegrees(values[0]);
+	            mCampassManager.orientDegree = (float)Math.toDegrees(values[0]);
+	            mCampassManager.tiltDegree = (float)Math.toDegrees(values[1]);
+	            mCampassManager.rotateDegree = (float)Math.toDegrees(values[2]);
+	            
 	            double radian = Math.atan2(event.values[0], event.values[1]);
-				float degree = (float) (radian * 180 / Math.PI);
+				float degree = (float) Math.toDegrees(radian);
+				//set magnetic pointer
 				absoluteCampassView.setMagneticNorth(degree);
+				
+				mReferenceText.setText("mRefer: " + String.valueOf(mCampassManager.mReferenceDegree));
+				mDiffText.setText("mDiff: " + String.valueOf(mCampassManager.mDiff));
 			}
 			
 			@Override
