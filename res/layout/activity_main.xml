@@ -19,7 +19,7 @@
             android:layout_height="fill_parent"
             android:layout_weight="1" >
 
-		    <mtrec.rock.object.CampassView
+		    <mtrec.campass.view.CampassView
 		        android:id="@+id/absoluteNorth"
 		        android:layout_width="fill_parent"
 		        android:layout_height="fill_parent"

@@ -1,4 +1,4 @@
-package mtrec.rock.object;
+package mtrec.campass.view;
 
 import java.util.Random;
 
