@@ -23,19 +23,18 @@ public class CampassManager {
 	public float newMagnetIntensity = 0;
 	//if started
 	private boolean mDirectionStarted;
-	//
-	public float mReferenceDegree;
+	//reference degree
+	public float[] mReferenceDegree = {0, 0, 0};
 	//magnet degree
-	public float magDegree;
-	public float mDiff;
-	public float[] mDiffArr = new float[windowSize];
+	public float[] magDegree = {0, 0, 0};
+	public float[] mDiff = {0, 0, 0};
+	public float[][] mDiffArr = new float[3][windowSize];
 	private static int windowSize = 50000;
 	private int iter = 0;
 
 	private HandlerThread mCalculationHandlerThread;
 	private Handler mCalculationHandler;
 	private List<CampassListener> mCampassListeners = new ArrayList<CampassListener>();
-	private List<SensorEventListener> mSensorEventListeners = new ArrayList<SensorEventListener>();
 	
 	//magnet field tensity
 	private double magneticIntensity = 0;
@@ -48,6 +47,7 @@ public class CampassManager {
 	public float orientDegree = 0;
 	public float tiltDegree = 0;
 	public float rotateDegree = 0;
+
 	
 	public CampassManager(SensorManager sensorManager) {
 		
@@ -62,6 +62,7 @@ public class CampassManager {
 		mCalculationHandlerThread.start();
 		mCalculationHandler = new Handler(mCalculationHandlerThread.getLooper());
 		
+		
 		mSensorEventListener = new SensorEventListener() {
 			
 			private long startTime = 0;
@@ -75,23 +76,26 @@ public class CampassManager {
 					magneticFieldValues = event.values;
 	                //calculate intensity
 	                magneticIntensity = Math.sqrt(
-	                				magneticFieldValues[0]*magneticFieldValues[0] 
-	                				+ magneticFieldValues[1]*magneticFieldValues[1] 
-	                				+ magneticFieldValues[2]*magneticFieldValues[2]);
+	                				magneticFieldValues[0] * magneticFieldValues[0] 
+	                				+ magneticFieldValues[1] * magneticFieldValues[1]
+	                				+ magneticFieldValues[2] * magneticFieldValues[2]);
 	                
 	                formerMagnetIntensity = newMagnetIntensity;
 	                newMagnetIntensity = (float) magneticIntensity;
+	                
 	                //format change
 	                /*DecimalFormat fnum = new  DecimalFormat("#########.#");
 		            String str = fnum.format(magneticTense);
 					magText.setText("Magnet Tensity: " + str);*/
-	                float radian = (float) Math.atan2(event.values[0], event.values[1]);
-					final float degree = (float) Math.toDegrees(radian);
+	                
+					magDegree[0] = (float)Math.toDegrees(Math.atan2(event.values[0], event.values[1]));
+					magDegree[1] = (float)Math.toDegrees(Math.atan2(event.values[0], event.values[2]));
+					magDegree[2] = (float)Math.toDegrees(Math.atan2(event.values[1], event.values[2]));
 					
 					mCalculationHandler.post(new Runnable() {
 						@Override
 						public void run() {
-							calibrateMagnetDegree(degree, true);
+							calibrateMagnetDegree(magDegree, true);
 						}
 					});
 				}
@@ -107,13 +111,17 @@ public class CampassManager {
 					
 					if (startTime > 0)
 					{
+						
 						// z-axis rotation
-						final float degree = (float) Math.toDegrees(event.values[2] * (currentTime - startTime) / 1000);
+						float zRotateDegree = (float) Math.toDegrees(event.values[2] * (currentTime - startTime) / 1000);
+						float yRotateDegree = (float) Math.toDegrees(event.values[1] * (currentTime - startTime) / 1000);
+						float xRotateDegree = (float) Math.toDegrees(event.values[0] * (currentTime - startTime) / 1000);
+						final float[] rotateDegrees = {zRotateDegree, yRotateDegree, xRotateDegree};
 						
 						mCalculationHandler.post(new Runnable() {
 							@Override
 							public void run() {
-								calibrateMagnetDegree(degree, false);
+								calibrateMagnetDegree(rotateDegrees, false);
 							}
 						});
 						
@@ -131,8 +139,6 @@ public class CampassManager {
 	            tiltDegree = (float)Math.toDegrees(values[1]);
 	            rotateDegree = (float)Math.toDegrees(values[2]);
 	            
-	            double radian = Math.atan2(event.values[0], event.values[1]);
-				float degree = (float) Math.toDegrees(radian);
 				
 				//mReferenceText.setText("mRefer: " + String.valueOf(mCampassManager.mReferenceDegree));
 				//mDiffText.setText("mDiff: " + String.valueOf(mCampassManager.newMagnetTensity - mCampassManager.formerMagnetTensity));
@@ -150,20 +156,23 @@ public class CampassManager {
 	}
 	
 	//reset when extreme rotation
-	public void resetNorth() {
+	/*public void resetNorth() {
+		for (int i = 0; i < mDiff.length; i++) {
+			mDiff
+		}
 		mDiff = 0;
 		for (int i = 0; i < windowSize; i++) {
 			mDiffArr[i] = 0;
 		}
 		mReferenceDegree = magDegree;
 		mDirectionStarted = false;
-	}
+	}*/
 	
 	//register all
 	public void registerCampassListener() {
-		mSensorManager.registerListener(mSensorEventListener, accelSensor, SensorManager.SENSOR_DELAY_GAME);
-		mSensorManager.registerListener(mSensorEventListener, magnetSensor, SensorManager.SENSOR_DELAY_GAME);
-		mSensorManager.registerListener(mSensorEventListener, gyroscopeSensor, SensorManager.SENSOR_DELAY_GAME);
+		mSensorManager.registerListener(mSensorEventListener, accelSensor, SensorManager.SENSOR_DELAY_FASTEST);
+		mSensorManager.registerListener(mSensorEventListener, magnetSensor, SensorManager.SENSOR_DELAY_FASTEST);
+		mSensorManager.registerListener(mSensorEventListener, gyroscopeSensor, SensorManager.SENSOR_DELAY_FASTEST);
 	}
 	
 	//unregister all
@@ -184,52 +193,60 @@ public class CampassManager {
 	}
 	
 	//core algorithm: calibrate north direction
-	private synchronized float calibrateMagnetDegree(float degree, boolean isReal) {
+	private synchronized void calibrateMagnetDegree(float[] degrees, boolean isReal) {
 		
 		if (isReal)	//magnetic input
 		{
-			magDegree = degree;
+			for (int i = 0; i < degrees.length; i++) {
+				magDegree[i] = degrees[i];
+			}
 			if (!mDirectionStarted)
 			{
 				//initial state
-				mReferenceDegree = degree;
-				mDiff = 0;
+				for (int i = 0; i < degrees.length; i++) {
+					mReferenceDegree[i] = degrees[i];
+				}
 				mDirectionStarted = true;
 			} 
 			else 
 			{
-				float diff = magDegree - mReferenceDegree;
-				diff = normalize(diff);
-				if(iter >= windowSize)
-					iter = 0;
-				
-				mDiff -= mDiffArr[iter] / windowSize;
-				mDiff += diff / windowSize;
-				mDiffArr[iter++] = diff;
+				for (int i = 0; i < magDegree.length; i++) {
+					
+					float diff = magDegree[i] - mReferenceDegree[i];
+					diff = normalize(diff);
+					if(iter >= windowSize)
+						iter = 0;
+					mDiff[i] -= mDiffArr[i][iter] / windowSize;
+					mDiff[i] += diff / windowSize;
+					mDiffArr[i][iter++] = diff;
+				}
+
 			}
 		}
 		else //gyroscope input
 		{
 			if (mDirectionStarted)
 			{
-				mReferenceDegree += degree;
-				float diff = magDegree - mReferenceDegree;
-				diff = normalize(diff);
-				//take average
-				if(iter >= windowSize)
-					iter = 0;
-				
-				mDiff -= mDiffArr[iter] / windowSize;
-				mDiff += diff / windowSize;
-				mDiffArr[iter++] = diff;
+				for (int i = 0; i < magDegree.length; i++) {
+					
+					mReferenceDegree[i] += degrees[i];
+					float diff = magDegree[i] - mReferenceDegree[i];
+					diff = normalize(diff);
+					//take average
+					if(iter >= windowSize)
+						iter = 0;
+					
+					mDiff[i] -= mDiffArr[i][iter] / windowSize;
+					mDiff[i] += diff / windowSize;
+					mDiffArr[i][iter++] = diff;
+				}
 			}
 		}
 		
 		for (CampassListener campassListener : mCampassListeners) {
-			campassListener.onDirectionChanged(magDegree, mReferenceDegree + mDiff);
+			campassListener.onDirectionChanged(magDegree[0], mReferenceDegree[0] + mDiff[0]);
 		}
 		
-		return mReferenceDegree + mDiff;
 	}
 	
 	public float normalize(float degree) {
@@ -242,8 +259,12 @@ public class CampassManager {
 	
 	//init degrees
 	private void initValues() {
+		
 		mDirectionStarted = false;
-		mReferenceDegree = magDegree = mDiff = 0;
+		for (int i = 0; i < magDegree.length; i++) {
+			mReferenceDegree[i] = magDegree[i] = mDiff[i] = 0;
+		}
+		
 	}
 
 }
