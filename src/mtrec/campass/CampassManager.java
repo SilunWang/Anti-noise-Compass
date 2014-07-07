@@ -47,6 +47,13 @@ public class CampassManager {
 	public float orientDegree = 0;
 	public float tiltDegree = 0;
 	public float rotateDegree = 0;
+	public float[] RR={0,0,0};
+	
+	float zRotateDegree = 0;
+	float yRotateDegree = 0;
+	float xRotateDegree = 0;
+	
+	private float factor = 0f;
 
 	
 	public CampassManager(SensorManager sensorManager) {
@@ -99,7 +106,7 @@ public class CampassManager {
 						}
 					});
 				}
-				// acceler change
+				// accelerator change
 				else if(event.sensor.getType() == Sensor.TYPE_ACCELEROMETER){
 					
 					accelerometerValues = event.values;
@@ -111,12 +118,41 @@ public class CampassManager {
 					
 					if (startTime > 0)
 					{
+						float sinTheta = (float) Math.sin(tiltDegree);
+						float cosTheta = 0;
+						// test Gimbal Lock
+						/*if (Math.abs(tiltDegree - Math.toRadians(90)) < 0.6)
+						{
+							resetNorth();
+							return;
+						}
+						else if(Math.abs(tiltDegree - Math.toRadians(-90)) < 0.6)
+						{
+							resetNorth();
+							return;
+						}
+						// no Gimbal Lock
+						else 
+						{*/
+							cosTheta = (float) Math.cos(tiltDegree);
+						//}
+						float secTheta = 1 / cosTheta;
+						float tanTheta = sinTheta / cosTheta;
+						float sinPhi = (float) Math.sin(orientDegree);
+						float cosPhi = (float) Math.cos(orientDegree);
+						float w3 = (float) Math.toDegrees(event.values[2] * (currentTime - startTime) / 1000);
+						float w2 = (float) Math.toDegrees(event.values[1] * (currentTime - startTime) / 1000);
+						float w1 = (float) Math.toDegrees(event.values[0] * (currentTime - startTime) / 1000);
 						
 						// z-axis rotation
-						float zRotateDegree = (float) Math.toDegrees(event.values[2] * (currentTime - startTime) / 1000);
-						float yRotateDegree = (float) Math.toDegrees(event.values[1] * (currentTime - startTime) / 1000);
-						float xRotateDegree = (float) Math.toDegrees(event.values[0] * (currentTime - startTime) / 1000);
+						zRotateDegree = factor*zRotateDegree + (1-factor)*(w3 + sinPhi*tanTheta*w2 + cosPhi*tanTheta*w1);
+						yRotateDegree = factor*yRotateDegree + (1-factor)*(cosPhi*w2 - sinPhi*w1);
+						xRotateDegree = factor*xRotateDegree + (1-factor)*(sinPhi*secTheta*w2 + cosPhi*secTheta*w1);
 						final float[] rotateDegrees = {zRotateDegree, yRotateDegree, xRotateDegree};
+						
+						RR[0] = Math.abs(tanTheta);
+						RR[1] += yRotateDegree;
+						RR[2] += xRotateDegree;
 						
 						mCalculationHandler.post(new Runnable() {
 							@Override
@@ -130,18 +166,17 @@ public class CampassManager {
 				}
 				
 				//get R-matrix
-	            SensorManager.getRotationMatrix(Rmatrix, null, accelerometerValues, magneticFieldValues);    
+	            SensorManager.getRotationMatrix(Rmatrix, null, accelerometerValues, magneticFieldValues);
 	            //get orientation
 	            SensorManager.getOrientation(Rmatrix, values);
 	            
-	            //×ª»»Îª½Ç¶È
-	            orientDegree = (float)Math.toDegrees(values[0]);
-	            tiltDegree = (float)Math.toDegrees(values[1]);
-	            rotateDegree = (float)Math.toDegrees(values[2]);
-	            
-				
-				//mReferenceText.setText("mRefer: " + String.valueOf(mCampassManager.mReferenceDegree));
-				//mDiffText.setText("mDiff: " + String.valueOf(mCampassManager.newMagnetTensity - mCampassManager.formerMagnetTensity));
+	            //Euler angles
+	            //azimuth-phi
+	            orientDegree = factor*orientDegree + (1-factor)*values[0];
+	            //pitch-theta
+	            tiltDegree = factor*tiltDegree + (1-factor)*values[1];
+	            //roll-psai
+	            rotateDegree = factor*rotateDegree + (1-factor)*values[2];
 				
 			}
 			
@@ -156,17 +191,19 @@ public class CampassManager {
 	}
 	
 	//reset when extreme rotation
-	/*public void resetNorth() {
+	public void resetNorth() {
 		for (int i = 0; i < mDiff.length; i++) {
-			mDiff
+			mDiff[i] = 0;
+			mReferenceDegree[i] = magDegree[i];
 		}
-		mDiff = 0;
 		for (int i = 0; i < windowSize; i++) {
-			mDiffArr[i] = 0;
+			mDiffArr[0][i] = 0;
+			mDiffArr[1][i] = 0;
+			mDiffArr[2][i] = 0;
 		}
-		mReferenceDegree = magDegree;
+		iter = 0;
 		mDirectionStarted = false;
-	}*/
+	}
 	
 	//register all
 	public void registerCampassListener() {

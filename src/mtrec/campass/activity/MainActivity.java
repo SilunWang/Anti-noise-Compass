@@ -34,6 +34,10 @@ public class MainActivity extends Activity {
 	private TextView magText, mReferenceText, mDiffText;
 	private Handler calculationHandler;
 	private double magneticTense = 0;
+	
+	public float orientDegree = 0;
+	public float tiltDegree = 0;
+	public float rotateDegree = 0;
 
 	
 	@Override
@@ -68,6 +72,12 @@ public class MainActivity extends Activity {
 					public void run() {
 						absoluteCampassView.setAbsoluteNorth(oriDegree);
 						absoluteCampassView.setMagneticNorth(magDegree);
+						tiltDegree = mCampassManager.tiltDegree;
+						DecimalFormat fnum = new  DecimalFormat("####.0");
+			            String str = fnum.format(tiltDegree);
+						rotateDegree = mCampassManager.RR[2];
+						mReferenceText.setText(String.valueOf(tiltDegree));
+						mDiffText.setText("x" + String.valueOf(rotateDegree));
 					}
 				});
 			}
