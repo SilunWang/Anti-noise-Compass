@@ -72,12 +72,8 @@ public class MainActivity extends Activity {
 					public void run() {
 						absoluteCampassView.setAbsoluteNorth(oriDegree);
 						absoluteCampassView.setMagneticNorth(magDegree);
-						tiltDegree = mCampassManager.tiltDegree;
-						DecimalFormat fnum = new  DecimalFormat("####.0");
-			            String str = fnum.format(tiltDegree);
-						rotateDegree = mCampassManager.RR[2];
-						mReferenceText.setText(String.valueOf(tiltDegree));
-						mDiffText.setText("x" + String.valueOf(rotateDegree));
+						mReferenceText.setText("ori: "+ String.valueOf(oriDegree));
+						mDiffText.setText("mag: " + String.valueOf(magDegree));
 					}
 				});
 			}
