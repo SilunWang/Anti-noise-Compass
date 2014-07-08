@@ -53,7 +53,11 @@ public class CampassManager {
 	float yRotateDegree = 0;
 	float xRotateDegree = 0;
 	
-	private float factor = 0f;
+	private float factor = 0.98f;
+	private float factor1 = 0.85f;
+	private float w1 = 0;
+	private float w2 = 0;
+	private float w3 = 0;
 
 	
 	public CampassManager(SensorManager sensorManager) {
@@ -119,35 +123,36 @@ public class CampassManager {
 					if (startTime > 0)
 					{
 						float sinTheta = (float) Math.sin(tiltDegree);
-						float cosTheta = 0;
+						float cosTheta = 0.1f;
 						// test Gimbal Lock
-						/*if (Math.abs(tiltDegree - Math.toRadians(90)) < 0.6)
+						if (Math.abs(tiltDegree - Math.toRadians(90)) < 0.05)
 						{
-							resetNorth();
-							return;
+							//resetNorth();
+							//return;
 						}
-						else if(Math.abs(tiltDegree - Math.toRadians(-90)) < 0.6)
+						else if(Math.abs(tiltDegree - Math.toRadians(-90)) < 0.05)
 						{
-							resetNorth();
-							return;
+							cosTheta = -1 * cosTheta;
+							//resetNorth();
+							//return;
 						}
 						// no Gimbal Lock
 						else 
-						{*/
+						{
 							cosTheta = (float) Math.cos(tiltDegree);
-						//}
+						}
 						float secTheta = 1 / cosTheta;
 						float tanTheta = sinTheta / cosTheta;
 						float sinPhi = (float) Math.sin(orientDegree);
 						float cosPhi = (float) Math.cos(orientDegree);
-						float w3 = (float) Math.toDegrees(event.values[2] * (currentTime - startTime) / 1000);
-						float w2 = (float) Math.toDegrees(event.values[1] * (currentTime - startTime) / 1000);
-						float w1 = (float) Math.toDegrees(event.values[0] * (currentTime - startTime) / 1000);
+						w3 = factor1*w3 + (1-factor1)*(float) Math.toDegrees(event.values[2] * (currentTime - startTime) / 1000);
+						w2 = factor1*w2 + (1-factor1)*(float) Math.toDegrees(event.values[1] * (currentTime - startTime) / 1000);
+						w1 = factor1*w1 + (1-factor1)*(float) Math.toDegrees(event.values[0] * (currentTime - startTime) / 1000);
 						
 						// z-axis rotation
-						zRotateDegree = factor*zRotateDegree + (1-factor)*(w3 + sinPhi*tanTheta*w2 + cosPhi*tanTheta*w1);
-						yRotateDegree = factor*yRotateDegree + (1-factor)*(cosPhi*w2 - sinPhi*w1);
-						xRotateDegree = factor*xRotateDegree + (1-factor)*(sinPhi*secTheta*w2 + cosPhi*secTheta*w1);
+						zRotateDegree = w3 + sinPhi*tanTheta*w2 + cosPhi*tanTheta*w1;
+						yRotateDegree = cosPhi*w2 - sinPhi*w1;
+						xRotateDegree = sinPhi*secTheta*w2 + cosPhi*secTheta*w1;
 						final float[] rotateDegrees = {zRotateDegree, yRotateDegree, xRotateDegree};
 						
 						RR[0] = Math.abs(tanTheta);
