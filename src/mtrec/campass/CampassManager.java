@@ -18,16 +18,22 @@ public class CampassManager {
 	
 	private final SensorManager mSensorManager;
 	private SensorEventListener mSensorEventListener;
-	private Sensor magnetSensor, accelSensor, gyroscopeSensor, rotateSensor;
+	private Sensor magnetSensor, gyroscopeSensor, rotateSensor;
 	
+	//magnet field intensity
 	public float formerMagnetIntensity = 0;
 	public float newMagnetIntensity = 0;
 	//if started
-	private boolean mDirectionStarted;
+	private boolean mDirectionStarted = false;
 	//reference degree
 	public float[] mReferenceDegree = {0, 0, 0};
 	//magnet degree
 	public float[] magDegree = {0, 0, 0};
+	//absolute-north degree
+	final float[] quatDegrees = {0, 0, 0};
+	//delta absolute-north degree
+	final float[] rotateDegrees = {0, 0, 0};
+	
 	public float[] mDiff = {0, 0, 0};
 	public float[][] mDiffArr = new float[3][windowSize];
 	private static int windowSize = 50000;
@@ -37,26 +43,14 @@ public class CampassManager {
 	private Handler mCalculationHandler;
 	private List<CampassListener> mCampassListeners = new ArrayList<CampassListener>();
 	
-	//magnet field tensity
-	private double magneticIntensity = 0;
 	
 	private boolean firstRotate = true;
-	//matrix
+	//rotation matrix
 	public float[] Rmatrix = new float[9];
 	
-	//x, y, z degrees
-	public float orientDegree = 0;
-	public float tiltDegree = 0;
-	public float rotateDegree = 0;
-
-	final float[] quatDegrees = {0, 0, 0};
-	final float[] rotateDegrees = {0, 0, 0};
-	
-	float zRotateDegree = 0;
-	float yRotateDegree = 0;
-	float xRotateDegree = 0;
-	
-	private float factor = 0.3f;
+	//filter factors
+	private float low_pass_factor = 0.5f;
+	private float high_pass_factor = 0.35f;
 	
 	private float[] quaterDelta = {0, 0, 0, 0};
 	private float[] quaternion = {0, 0, 0, 0};
@@ -66,7 +60,6 @@ public class CampassManager {
 		
 		mSensorManager = sensorManager;
 		magnetSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
-		accelSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
 		gyroscopeSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
 		rotateSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
 		initValues();
@@ -80,31 +73,35 @@ public class CampassManager {
 		mSensorEventListener = new SensorEventListener() {
 			
 			private long startTime = 0;
+			
 			@Override
 			public void onSensorChanged(SensorEvent event) {
 				
-				// TODO Auto-generated method stub
-				// Magnet change
+				// Magnet
 				if(event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD){
-	                
+	                //x-y plane
 					magDegree[0] = (float)Math.toDegrees(Math.atan2(event.values[0], event.values[1]));
+					//x-z plane
 					magDegree[1] = (float)Math.toDegrees(Math.atan2(event.values[0], event.values[2]));
+					//y-z plane
 					magDegree[2] = (float)Math.toDegrees(Math.atan2(event.values[1], event.values[2]));
 					
 					mCalculationHandler.post(new Runnable() {
 						@Override
 						public void run() {
-							calibrateMagnetDegree(magDegree, true);
+							calibrateMagnetDegree(magDegree, false);
 						}
 					});
 				}
-				// gyroscope change
+				
+				// Gyroscope
 				else if(event.sensor.getType() == Sensor.TYPE_GYROSCOPE){
 					
 					long currentTime = System.currentTimeMillis();
 					
 					if (startTime > 0)
 					{
+						//delta-angle
 						float[] angulars = {0, 0, 0};
 						//roll
 						angulars[0] = event.values[0] * (currentTime - startTime) / 1000;
@@ -121,26 +118,26 @@ public class CampassManager {
 						float sin3 = (float) Math.sin(angulars[2]);
 						float cos3 = (float) Math.cos(angulars[2]);
 						
+						//delta-Quaternion
 						quaterDelta[0] = cos1*cos2*cos3 - sin1*sin2*sin3;
 						quaterDelta[1] = cos1*cos2*sin3 + sin1*sin2*cos3;
 						quaterDelta[2] = sin1*cos2*cos3 + cos1*sin2*sin3;
 						quaterDelta[3] = cos1*sin2*cos3 - sin1*cos2*sin3;
 						
-						newQuat[0] = (quaternion[0]*quaterDelta[0] - quaternion[1]*quaterDelta[1] 
-								- quaternion[2]*quaterDelta[2] - quaternion[3]*quaterDelta[3]);
-						newQuat[1] = (quaternion[0]*quaterDelta[1] + quaternion[1]*quaterDelta[0] 
-								+ quaternion[2]*quaterDelta[3] - quaternion[3]*quaterDelta[2]);
-						newQuat[2] = (quaternion[0]*quaterDelta[2] - quaternion[1]*quaterDelta[3] 
-								+ quaternion[2]*quaterDelta[0] + quaternion[3]*quaterDelta[1]);
-						newQuat[3] = (quaternion[0]*quaterDelta[3] + quaternion[1]*quaterDelta[2] 
-								- quaternion[2]*quaterDelta[1] + quaternion[3]*quaterDelta[0]);
+						//new Quaternion values
+						newQuat[0] = (quaternion[0]*quaterDelta[0] - quaternion[1]*quaterDelta[1] - quaternion[2]*quaterDelta[2] - quaternion[3]*quaterDelta[3]);
+						newQuat[1] = (quaternion[0]*quaterDelta[1] + quaternion[1]*quaterDelta[0] + quaternion[2]*quaterDelta[3] - quaternion[3]*quaterDelta[2]);
+						newQuat[2] = (quaternion[0]*quaterDelta[2] - quaternion[1]*quaterDelta[3] + quaternion[2]*quaterDelta[0] + quaternion[3]*quaterDelta[1]);
+						newQuat[3] = (quaternion[0]*quaterDelta[3] + quaternion[1]*quaterDelta[2] - quaternion[2]*quaterDelta[1] + quaternion[3]*quaterDelta[0]);
 						
+						//low pass filter
 						for (int i = 0; i < quaternion.length; i++) {
-							quaternion[i] = factor*quaternion[i] + (1-factor)*newQuat[i];
+							quaternion[i] = low_pass_factor*quaternion[i] + (1-low_pass_factor)*newQuat[i];
 						}
 						
 						mSensorManager.getRotationMatrixFromVector(Rmatrix, quaternion);
 						
+						//calculate degree changes
 						rotateDegrees[0] = (float)Math.toDegrees(Math.atan2(Rmatrix[3], Rmatrix[4])) - quatDegrees[0];
 						quatDegrees[0] += rotateDegrees[0];
 						rotateDegrees[1] = (float)Math.toDegrees(Math.atan2(Rmatrix[3], Rmatrix[5])) - quatDegrees[1];
@@ -151,26 +148,35 @@ public class CampassManager {
 						mCalculationHandler.post(new Runnable() {
 							@Override
 							public void run() {
-								calibrateMagnetDegree(rotateDegrees, false);
+								calibrateMagnetDegree(rotateDegrees, true);
 							}
 						});
 					
 					}
-					startTime = currentTime;
 					
+					startTime = currentTime;
 				}
+				
+				// rotation vector
 				else if(event.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR){
 					
-					if(firstRotate){
+					if(firstRotate || startTime % 10000 == 0){
+						
 						quaternion[0] = event.values[0];
 						quaternion[1] = event.values[1];
 						quaternion[2] = event.values[2];
-						quaternion[3] = (float) Math.sqrt(1 - quaternion[0]*quaternion[0] - quaternion[1]*quaternion[1] - quaternion[2]*quaternion[2]);
+						
+						if (event.values.length == 4) {
+							quaternion[3] = event.values[3];
+						}
+						else {
+							quaternion[3] = (float) Math.sqrt(1 - quaternion[0]*quaternion[0] 
+									- quaternion[1]*quaternion[1] - quaternion[2]*quaternion[2]);
+						}
+						
 						firstRotate = false;
 					}
-					
 				}
-				
 				
 			}
 			
@@ -199,7 +205,7 @@ public class CampassManager {
 		mDirectionStarted = false;
 	}
 	
-	//register all
+	//register all listeners
 	public void registerCampassListener() {
 		mSensorManager.registerListener(mSensorEventListener, rotateSensor, SensorManager.SENSOR_DELAY_FASTEST);
 		mSensorManager.registerListener(mSensorEventListener, magnetSensor, SensorManager.SENSOR_DELAY_FASTEST);
@@ -223,10 +229,10 @@ public class CampassManager {
 		super.finalize();
 	}
 	
-	//core algorithm: calibrate north direction
+	//core algorithm: calibrate direction
 	private synchronized void calibrateMagnetDegree(float[] degrees, boolean isReal) {
 		
-		if (isReal)	//magnetic input
+		if (!isReal)	//magnet degrees
 		{
 			for (int i = 0; i < degrees.length; i++) {
 				magDegree[i] = degrees[i];
@@ -243,7 +249,7 @@ public class CampassManager {
 			{
 				for (int i = 0; i < magDegree.length; i++) {
 					
-					float diff = magDegree[i] - mReferenceDegree[i];
+					float diff = (magDegree[i] - mReferenceDegree[i])*high_pass_factor;
 					diff = normalize(diff);
 					if(iter >= windowSize)
 						iter = 0;
@@ -251,22 +257,20 @@ public class CampassManager {
 					mDiff[i] += diff / windowSize;
 					mDiffArr[i][iter++] = diff;
 				}
-
 			}
 		}
-		else //gyroscope input
+		else //gyroscope calibrate
 		{
 			if (mDirectionStarted)
 			{
 				for (int i = 0; i < magDegree.length; i++) {
 					
 					mReferenceDegree[i] += degrees[i];
-					float diff = magDegree[i] - mReferenceDegree[i];
+					float diff = (magDegree[i] - mReferenceDegree[i])*high_pass_factor;
 					diff = normalize(diff);
 					//take average
 					if(iter >= windowSize)
 						iter = 0;
-					
 					mDiff[i] -= mDiffArr[i][iter] / windowSize;
 					mDiff[i] += diff / windowSize;
 					mDiffArr[i][iter++] = diff;
@@ -275,23 +279,26 @@ public class CampassManager {
 		}
 		
 		for (CampassListener campassListener : mCampassListeners) {
-			campassListener.onDirectionChanged(magDegree[0], quatDegrees[0]);
+			campassListener.onDirectionChanged(magDegree[0], mReferenceDegree[0] + mDiff[0]);
 		}
 		
 	}
 	
+	//normalize degree to [-180, 180)
 	public float normalize(float degree) {
-		while (degree > 180)
+		while (degree >= 180)
 			degree -= 360;
 		while (degree < -180)
 			degree += 360;
 		return degree;
 	}
 	
-	//init degrees
+	//initiate degrees
 	private void initValues() {
 		
+		firstRotate = true;
 		mDirectionStarted = false;
+		
 		for (int i = 0; i < magDegree.length; i++) {
 			mReferenceDegree[i] = magDegree[i] = mDiff[i] = 0;
 		}
