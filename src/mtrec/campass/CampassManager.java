@@ -36,7 +36,7 @@ public class CampassManager {
 	
 	public float[] mDiff = {0, 0, 0};
 	public float[][] mDiffArr = new float[3][windowSize];
-	private static int windowSize = 50000;
+	private final static int windowSize = 10000;
 	private int iter = 0;
 
 	private HandlerThread mCalculationHandlerThread;
@@ -50,7 +50,7 @@ public class CampassManager {
 	
 	//filter factors
 	private float low_pass_factor = 0.5f;
-	private float high_pass_factor = 0.35f;
+	private float high_pass_factor = 0.25f;
 	
 	private float[] quaterDelta = {0, 0, 0, 0};
 	private float[] quaternion = {0, 0, 0, 0};
@@ -62,6 +62,7 @@ public class CampassManager {
 		magnetSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
 		gyroscopeSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
 		rotateSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
+		//initial degrees and matrix
 		initValues();
 		
 		//Handler Thread
@@ -160,8 +161,9 @@ public class CampassManager {
 				// rotation vector
 				else if(event.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR){
 					
-					if(firstRotate || startTime % 10000 == 0){
+					if(firstRotate || startTime % 15000 < 20){
 						
+						initValues();
 						quaternion[0] = event.values[0];
 						quaternion[1] = event.values[1];
 						quaternion[2] = event.values[2];
@@ -248,7 +250,7 @@ public class CampassManager {
 			else 
 			{
 				for (int i = 0; i < magDegree.length; i++) {
-					
+					//high pass filter
 					float diff = (magDegree[i] - mReferenceDegree[i])*high_pass_factor;
 					diff = normalize(diff);
 					if(iter >= windowSize)
@@ -298,9 +300,18 @@ public class CampassManager {
 		
 		firstRotate = true;
 		mDirectionStarted = false;
+		iter = 0;
 		
 		for (int i = 0; i < magDegree.length; i++) {
-			mReferenceDegree[i] = magDegree[i] = mDiff[i] = 0;
+			mReferenceDegree[i] = quatDegrees[i] = magDegree[i];
+			mDiff[i] = rotateDegrees[i] = 0;
+			for (int j = 0; j < windowSize; j++) {
+				mDiffArr[i][j] = 0;
+			}
+		}
+		
+		for (int i = 0; i < quaternion.length; i++){
+			quaternion[i] = quaterDelta[i] = newQuat[i] = 0;
 		}
 		
 	}
