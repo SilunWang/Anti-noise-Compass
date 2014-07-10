@@ -33,6 +33,8 @@ public class CampassManager {
 	final float[] quatDegrees = {0, 0, 0};
 	//delta absolute-north degree
 	final float[] rotateDegrees = {0, 0, 0};
+	//delta-angle
+	float[] angulars = {0, 0, 0};
 	
 	public float[] mDiff = {0, 0, 0};
 	public float[][] mDiffArr = new float[3][windowSize];
@@ -50,7 +52,7 @@ public class CampassManager {
 	
 	//filter factors
 	private float low_pass_factor = 0.5f;
-	private float high_pass_factor = 0.25f;
+	private float high_pass_factor = 1f;
 	
 	private float[] quaterDelta = {0, 0, 0, 0};
 	private float[] quaternion = {0, 0, 0, 0};
@@ -102,14 +104,13 @@ public class CampassManager {
 					
 					if (startTime > 0)
 					{
-						//delta-angle
-						float[] angulars = {0, 0, 0};
+						// get the middle values of angular
 						//roll
-						angulars[0] = event.values[0] * (currentTime - startTime) / 1000;
+						angulars[0] = (angulars[0] + event.values[0] * (currentTime - startTime) / 1000) / 2;
 						//pitch
-						angulars[1] = event.values[1] * (currentTime - startTime) / 1000;
+						angulars[1] = (angulars[1] + event.values[1] * (currentTime - startTime) / 1000) / 2;
 						//yaw / azimuth
-						angulars[2] = event.values[2] * (currentTime - startTime) / 1000;
+						angulars[2] = (angulars[2] + event.values[2] * (currentTime - startTime) / 1000) / 2;
 					  
 						
 						float sin1 = (float) Math.sin(angulars[0]);
@@ -161,7 +162,7 @@ public class CampassManager {
 				// rotation vector
 				else if(event.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR){
 					
-					if(firstRotate || startTime % 15000 < 20){
+					if(firstRotate || startTime % 30000 < 20){
 						
 						initValues();
 						quaternion[0] = event.values[0];
@@ -251,8 +252,8 @@ public class CampassManager {
 			{
 				for (int i = 0; i < magDegree.length; i++) {
 					//high pass filter
-					float diff = (magDegree[i] - mReferenceDegree[i])*high_pass_factor;
-					diff = normalize(diff);
+					float diff = (magDegree[i] - mReferenceDegree[i]);
+					diff = normalize(diff)*high_pass_factor;
 					if(iter >= windowSize)
 						iter = 0;
 					mDiff[i] -= mDiffArr[i][iter] / windowSize;
@@ -268,8 +269,8 @@ public class CampassManager {
 				for (int i = 0; i < magDegree.length; i++) {
 					
 					mReferenceDegree[i] += degrees[i];
-					float diff = (magDegree[i] - mReferenceDegree[i])*high_pass_factor;
-					diff = normalize(diff);
+					float diff = (magDegree[i] - mReferenceDegree[i]);
+					diff = normalize(diff)*high_pass_factor;
 					//take average
 					if(iter >= windowSize)
 						iter = 0;
