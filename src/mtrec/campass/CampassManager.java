@@ -28,17 +28,18 @@ public class CampassManager {
 	//reference degree
 	public float[] mReferenceDegree = {0, 0, 0};
 	//magnet degree
-	public float[] magDegree = {0, 0, 0};
+	public float[] magnetDegree = {0, 0, 0};
 	//absolute-north degree
 	final float[] quatDegrees = {0, 0, 0};
 	//delta absolute-north degree
-	final float[] rotateDegrees = {0, 0, 0};
+	public final float[] rotateDegrees = {0, 0, 0};
 	//delta-angle
-	float[] angulars = {0, 0, 0};
+	float[] deltaAngular = {0, 0, 0};
+	float[] angularSpeed = {0, 0, 0};
 	
 	public float[] mDiff = {0, 0, 0};
 	public float[][] mDiffArr = new float[3][windowSize];
-	private final static int windowSize = 10000;
+	private final static int windowSize = 4000;
 	private int iter = 0;
 
 	private HandlerThread mCalculationHandlerThread;
@@ -51,12 +52,12 @@ public class CampassManager {
 	public float[] Rmatrix = new float[9];
 	
 	//filter factors
-	private float low_pass_factor = 0.5f;
-	private float high_pass_factor = 1f;
+	private float low_pass_factor = 0.48f;
+	private float high_pass_factor = 0.25f;
 	
-	private float[] quaterDelta = {0, 0, 0, 0};
-	private float[] quaternion = {0, 0, 0, 0};
-	private float[] newQuat = {0, 0, 0, 0};
+	private float[] deltaQuater = {0, 0, 0, 0};
+	private float[] oldQuaternion = {0, 0, 0, 0};
+	private float[] newQuaternion = {0, 0, 0, 0};
 	
 	public CampassManager(SensorManager sensorManager) {
 		
@@ -83,16 +84,16 @@ public class CampassManager {
 				// Magnet
 				if(event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD){
 	                //x-y plane
-					magDegree[0] = (float)Math.toDegrees(Math.atan2(event.values[0], event.values[1]));
+					magnetDegree[0] = (float)Math.toDegrees(Math.atan2(event.values[0], event.values[1]));
 					//x-z plane
-					magDegree[1] = (float)Math.toDegrees(Math.atan2(event.values[0], event.values[2]));
+					magnetDegree[1] = (float)Math.toDegrees(Math.atan2(event.values[0], event.values[2]));
 					//y-z plane
-					magDegree[2] = (float)Math.toDegrees(Math.atan2(event.values[1], event.values[2]));
+					magnetDegree[2] = (float)Math.toDegrees(Math.atan2(event.values[1], event.values[2]));
 					
 					mCalculationHandler.post(new Runnable() {
 						@Override
 						public void run() {
-							calibrateMagnetDegree(magDegree, false);
+							calibrateMagnetDegree(magnetDegree, false);
 						}
 					});
 				}
@@ -106,44 +107,50 @@ public class CampassManager {
 					{
 						// get the middle values of angular
 						//roll
-						angulars[0] = (angulars[0] + event.values[0] * (currentTime - startTime) / 1000) / 2;
+						deltaAngular[0] = (angularSpeed[0] + event.values[0]) * (currentTime - startTime) / 2000;
+						angularSpeed[0] = event.values[0];
 						//pitch
-						angulars[1] = (angulars[1] + event.values[1] * (currentTime - startTime) / 1000) / 2;
-						//yaw / azimuth
-						angulars[2] = (angulars[2] + event.values[2] * (currentTime - startTime) / 1000) / 2;
+						deltaAngular[1] = (angularSpeed[1] + event.values[1]) * (currentTime - startTime) / 2000;
+						angularSpeed[1] = event.values[1];
+						//yaw or azimuth
+						deltaAngular[2] = (angularSpeed[2] + event.values[2]) * (currentTime - startTime) / 2000;
+						angularSpeed[2] = event.values[2];
 					  
 						
-						float sin1 = (float) Math.sin(angulars[0]);
-						float cos1 = (float) Math.cos(angulars[0]);
-						float sin2 = (float) Math.sin(angulars[1]);
-						float cos2 = (float) Math.cos(angulars[1]);
-						float sin3 = (float) Math.sin(angulars[2]);
-						float cos3 = (float) Math.cos(angulars[2]);
+						float sin1 = (float) Math.sin(deltaAngular[0]);
+						float cos1 = (float) Math.cos(deltaAngular[0]);
+						float sin2 = (float) Math.sin(deltaAngular[1]);
+						float cos2 = (float) Math.cos(deltaAngular[1]);
+						float sin3 = (float) Math.sin(deltaAngular[2]);
+						float cos3 = (float) Math.cos(deltaAngular[2]);
 						
 						//delta-Quaternion
-						quaterDelta[0] = cos1*cos2*cos3 - sin1*sin2*sin3;
-						quaterDelta[1] = cos1*cos2*sin3 + sin1*sin2*cos3;
-						quaterDelta[2] = sin1*cos2*cos3 + cos1*sin2*sin3;
-						quaterDelta[3] = cos1*sin2*cos3 - sin1*cos2*sin3;
+						deltaQuater[0] = cos1*cos2*cos3 - sin1*sin2*sin3;
+						deltaQuater[1] = cos1*cos2*sin3 + sin1*sin2*cos3;
+						deltaQuater[2] = sin1*cos2*cos3 + cos1*sin2*sin3;
+						deltaQuater[3] = cos1*sin2*cos3 - sin1*cos2*sin3;
 						
 						//new Quaternion values
-						newQuat[0] = (quaternion[0]*quaterDelta[0] - quaternion[1]*quaterDelta[1] - quaternion[2]*quaterDelta[2] - quaternion[3]*quaterDelta[3]);
-						newQuat[1] = (quaternion[0]*quaterDelta[1] + quaternion[1]*quaterDelta[0] + quaternion[2]*quaterDelta[3] - quaternion[3]*quaterDelta[2]);
-						newQuat[2] = (quaternion[0]*quaterDelta[2] - quaternion[1]*quaterDelta[3] + quaternion[2]*quaterDelta[0] + quaternion[3]*quaterDelta[1]);
-						newQuat[3] = (quaternion[0]*quaterDelta[3] + quaternion[1]*quaterDelta[2] - quaternion[2]*quaterDelta[1] + quaternion[3]*quaterDelta[0]);
+						newQuaternion[0] = (oldQuaternion[0]*deltaQuater[0] - oldQuaternion[1]*deltaQuater[1] - oldQuaternion[2]*deltaQuater[2] - oldQuaternion[3]*deltaQuater[3]);
+						newQuaternion[1] = (oldQuaternion[0]*deltaQuater[1] + oldQuaternion[1]*deltaQuater[0] + oldQuaternion[2]*deltaQuater[3] - oldQuaternion[3]*deltaQuater[2]);
+						newQuaternion[2] = (oldQuaternion[0]*deltaQuater[2] - oldQuaternion[1]*deltaQuater[3] + oldQuaternion[2]*deltaQuater[0] + oldQuaternion[3]*deltaQuater[1]);
+						newQuaternion[3] = (oldQuaternion[0]*deltaQuater[3] + oldQuaternion[1]*deltaQuater[2] - oldQuaternion[2]*deltaQuater[1] + oldQuaternion[3]*deltaQuater[0]);
 						
 						//low pass filter
-						for (int i = 0; i < quaternion.length; i++) {
-							quaternion[i] = low_pass_factor*quaternion[i] + (1-low_pass_factor)*newQuat[i];
+						for (int i = 0; i < oldQuaternion.length; i++) {
+							oldQuaternion[i] = low_pass_factor*oldQuaternion[i] + (1-low_pass_factor)*newQuaternion[i];
 						}
 						
-						mSensorManager.getRotationMatrixFromVector(Rmatrix, quaternion);
+						mSensorManager.getRotationMatrixFromVector(Rmatrix, oldQuaternion);
 						
 						//calculate degree changes
+						//x-y plane direction rotate degree
 						rotateDegrees[0] = (float)Math.toDegrees(Math.atan2(Rmatrix[3], Rmatrix[4])) - quatDegrees[0];
 						quatDegrees[0] += rotateDegrees[0];
+						//x-z plane direction rotate degree
 						rotateDegrees[1] = (float)Math.toDegrees(Math.atan2(Rmatrix[3], Rmatrix[5])) - quatDegrees[1];
 						quatDegrees[1] += rotateDegrees[1];
+						//y-z plane direction rotate degree
 						rotateDegrees[2] = (float)Math.toDegrees(Math.atan2(Rmatrix[4], Rmatrix[5])) - quatDegrees[2];
 						quatDegrees[2] += rotateDegrees[2];
 						
@@ -162,19 +169,19 @@ public class CampassManager {
 				// rotation vector
 				else if(event.sensor.getType() == Sensor.TYPE_ROTATION_VECTOR){
 					
-					if(firstRotate || startTime % 30000 < 20){
+					if(firstRotate || startTime % 10000 < 5){
 						
 						initValues();
-						quaternion[0] = event.values[0];
-						quaternion[1] = event.values[1];
-						quaternion[2] = event.values[2];
+						oldQuaternion[0] = event.values[0];
+						oldQuaternion[1] = event.values[1];
+						oldQuaternion[2] = event.values[2];
 						
 						if (event.values.length == 4) {
-							quaternion[3] = event.values[3];
+							oldQuaternion[3] = event.values[3];
 						}
 						else {
-							quaternion[3] = (float) Math.sqrt(1 - quaternion[0]*quaternion[0] 
-									- quaternion[1]*quaternion[1] - quaternion[2]*quaternion[2]);
+							oldQuaternion[3] = (float) Math.sqrt(1 - oldQuaternion[0]*oldQuaternion[0] 
+									- oldQuaternion[1]*oldQuaternion[1] - oldQuaternion[2]*oldQuaternion[2]);
 						}
 						
 						firstRotate = false;
@@ -190,14 +197,13 @@ public class CampassManager {
 			}
 		};
 		
-		
 	}
 	
 	//reset when extreme rotation
 	public void resetNorth() {
 		for (int i = 0; i < mDiff.length; i++) {
 			mDiff[i] = 0;
-			mReferenceDegree[i] = magDegree[i];
+			mReferenceDegree[i] = magnetDegree[i];
 		}
 		for (int i = 0; i < windowSize; i++) {
 			mDiffArr[0][i] = 0;
@@ -238,7 +244,7 @@ public class CampassManager {
 		if (!isReal)	//magnet degrees
 		{
 			for (int i = 0; i < degrees.length; i++) {
-				magDegree[i] = degrees[i];
+				magnetDegree[i] = degrees[i];
 			}
 			if (!mDirectionStarted)
 			{
@@ -250,10 +256,11 @@ public class CampassManager {
 			} 
 			else 
 			{
-				for (int i = 0; i < magDegree.length; i++) {
+				for (int i = 0; i < magnetDegree.length; i++) {
 					//high pass filter
-					float diff = (magDegree[i] - mReferenceDegree[i]);
+					float diff = (magnetDegree[i] - mReferenceDegree[i]);
 					diff = normalize(diff)*high_pass_factor;
+					
 					if(iter >= windowSize)
 						iter = 0;
 					mDiff[i] -= mDiffArr[i][iter] / windowSize;
@@ -266,10 +273,11 @@ public class CampassManager {
 		{
 			if (mDirectionStarted)
 			{
-				for (int i = 0; i < magDegree.length; i++) {
+				for (int i = 0; i < magnetDegree.length; i++) {
 					
 					mReferenceDegree[i] += degrees[i];
-					float diff = (magDegree[i] - mReferenceDegree[i]);
+					mReferenceDegree[i] = normalize(mReferenceDegree[i]);
+					float diff = (magnetDegree[i] - mReferenceDegree[i]);
 					diff = normalize(diff)*high_pass_factor;
 					//take average
 					if(iter >= windowSize)
@@ -282,7 +290,7 @@ public class CampassManager {
 		}
 		
 		for (CampassListener campassListener : mCampassListeners) {
-			campassListener.onDirectionChanged(magDegree[0], mReferenceDegree[0] + mDiff[0]);
+			campassListener.onDirectionChanged(magnetDegree[0], mReferenceDegree[0] + mDiff[0]);
 		}
 		
 	}
@@ -303,16 +311,16 @@ public class CampassManager {
 		mDirectionStarted = false;
 		iter = 0;
 		
-		for (int i = 0; i < magDegree.length; i++) {
-			mReferenceDegree[i] = quatDegrees[i] = magDegree[i];
+		for (int i = 0; i < magnetDegree.length; i++) {
+			mReferenceDegree[i] = quatDegrees[i] = magnetDegree[i];
 			mDiff[i] = rotateDegrees[i] = 0;
 			for (int j = 0; j < windowSize; j++) {
 				mDiffArr[i][j] = 0;
 			}
 		}
 		
-		for (int i = 0; i < quaternion.length; i++){
-			quaternion[i] = quaterDelta[i] = newQuat[i] = 0;
+		for (int i = 0; i < oldQuaternion.length; i++){
+			oldQuaternion[i] = deltaQuater[i] = newQuaternion[i] = 0;
 		}
 		
 	}
