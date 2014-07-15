@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
 					public void run() {
 						absoluteCampassView.setAbsoluteNorth(oriDegree);
 						absoluteCampassView.setMagneticNorth(magDegree);
-						mReferenceText.setText("rotate: "+ String.valueOf(mCampassManager.rotateDegrees[0]));
+						mReferenceText.setText("maxSpeed: "+ String.valueOf(mCampassManager.maxAngularSpeed));
 						mDiffText.setText("mRefer: " + String.valueOf(mCampassManager.mReferenceDegree[0]));
 					}
 				});
